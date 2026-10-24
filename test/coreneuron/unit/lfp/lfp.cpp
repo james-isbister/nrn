@@ -5,8 +5,10 @@
 # See top-level LICENSE file for details.
 # =============================================================================.
 */
+#include "coreneuron/apps/corenrn_parameters.hpp"
 #include "coreneuron/io/lfp.hpp"
 #include "coreneuron/io/nrnsection_mapping.hpp"
+#include "coreneuron/io/reports/lfp_sum_report.hpp"
 #include "coreneuron/io/reports/report_event.hpp"
 #include "coreneuron/mpi/nrnmpi.h"
 
@@ -202,6 +204,42 @@ TEST_CASE("LFP_ReportEvent") {
 
     REQUIRE_THAT(mapinfo->_lfp[0], Catch::Matchers::WithinAbs(5.5, 1.0));
     REQUIRE_THAT(mapinfo->_lfp[3], Catch::Matchers::WithinAbs(7.0, 1.0));
+
+    // The same cells in a summed report: each electrode's value is the cells' total
+    ReportConfiguration config{};
+    config.output_path = report_name;
+    config.start = tstart;
+    config.stop = 1.0;
+    config.report_dt = report_dt;
+    {
+        auto summed = std::make_shared<LFPSumReport>(report_name, 2);
+        std::vector<LFPSumEvent::Cell> cells{{c42.get(), 0, 0, 2}, {c134.get(), 0, 0, 2}};
+        LFPSumEvent sum_event(summed, cells, true, config, dt, tstart);
+        sum_event.add_lfp(&nt, summed->row(0));
+        REQUIRE_THAT(summed->row(0)[0],
+                     Catch::Matchers::WithinRel(mapinfo->_lfp[0] + mapinfo->_lfp[2], 1e-12));
+        REQUIRE_THAT(summed->row(0)[1],
+                     Catch::Matchers::WithinRel(mapinfo->_lfp[1] + mapinfo->_lfp[3], 1e-12));
+
+        // a flush hands the rows on and clears them
+        const bool mpi_enable = corenrn_param.mpi_enable;
+        corenrn_param.mpi_enable = false;
+        summed->add_step(0.0);
+        summed->flush();
+        corenrn_param.mpi_enable = mpi_enable;
+        REQUIRE(summed->rows_flushed() == 1);
+        REQUIRE(summed->row(0)[0] == 0.0);
+    }
+    {
+        // two populations side by side in a row, and a report taking only the second electrode
+        auto summed = std::make_shared<LFPSumReport>(report_name, 3);
+        std::vector<LFPSumEvent::Cell> cells{{c42.get(), 0, 0, 2}, {c134.get(), 2, 1, 1}};
+        LFPSumEvent sum_event(summed, cells, true, config, dt, tstart);
+        sum_event.add_lfp(&nt, summed->row(0));
+        REQUIRE_THAT(summed->row(0)[0], Catch::Matchers::WithinRel(mapinfo->_lfp[0], 1e-12));
+        REQUIRE_THAT(summed->row(0)[1], Catch::Matchers::WithinRel(mapinfo->_lfp[1], 1e-12));
+        REQUIRE_THAT(summed->row(0)[2], Catch::Matchers::WithinRel(mapinfo->_lfp[3], 1e-12));
+    }
 
     delete mapinfo;
     delete nt.nrn_fast_imem;

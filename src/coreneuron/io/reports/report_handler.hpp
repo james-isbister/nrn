@@ -30,11 +30,18 @@ class ReportHandler {
     virtual void register_custom_report(const NrnThread& nt,
                                         const ReportConfiguration& config,
                                         const VarsToReport& vars_to_report);
+    /// an LFP report with method "sum", called on every rank
+    virtual void create_lfp_sum_report(ReportConfiguration& config, double dt);
 #endif
   protected:
 #ifdef ENABLE_SONATA_REPORTS
     std::vector<std::unique_ptr<ReportEvent>> m_report_events;
 #endif
 };
+
+#ifdef ENABLE_SONATA_REPORTS
+/// the positions in target_gids of the gids that are on this thread
+std::vector<int> get_intersection_ids(const NrnThread& nt, const std::vector<int>& target_gids);
+#endif
 
 }  // Namespace coreneuron

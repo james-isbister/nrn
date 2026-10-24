@@ -34,6 +34,12 @@ void ReportHandler::register_custom_report(const NrnThread& nt,
                   << config.output_path << "' not supported.\n";
     }
 }
+void ReportHandler::create_lfp_sum_report(ReportConfiguration& config, double dt) {
+    if (nrnmpi_myid == 0) {
+        std::cerr << "[WARNING] : Format '" << config.format << "' in report '"
+                  << config.output_path << "' not supported.\n";
+    }
+}
 
 /**
  * @brief Map each segment_id to a single node index in the given Memb_list.
@@ -321,7 +327,7 @@ static void append_sections_to_to_report(const std::shared_ptr<SecMapping>& sect
 
 
 /// @brief create an vector of ids in target_gids that are on this thread
-static std::vector<int> get_intersection_ids(const NrnThread& nt, std::vector<int>& target_gids) {
+std::vector<int> get_intersection_ids(const NrnThread& nt, const std::vector<int>& target_gids) {
     std::unordered_set<int> thread_gids;
     for (int i = 0; i < nt.ncell; i++) {
         thread_gids.insert(nt.presyns[i].gid_);
@@ -652,6 +658,10 @@ void ReportHandler::create_report(ReportConfiguration& report_config,
         std::cerr << "[ERROR] Synapse report mechanism to report: " << report_config.mech_names[0]
                   << " is not mapped in this simulation, cannot report on it \n";
         nrn_abort(1);
+    }
+    if (report_config.method == ReportMethod::Sum) {
+        create_lfp_sum_report(report_config, dt);
+        return;
     }
     for (int ith = 0; ith < nrn_nthread; ++ith) {
         NrnThread& nt = nrn_threads[ith];
