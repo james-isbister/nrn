@@ -34,6 +34,12 @@ void ReportHandler::register_custom_report(const NrnThread& nt,
                   << config.output_path << "' not supported.\n";
     }
 }
+void ReportHandler::create_lfp_sum_report(ReportConfiguration& config, double dt) {
+    if (nrnmpi_myid == 0) {
+        std::cerr << "[WARNING] : Format '" << config.format << "' in report '"
+                  << config.output_path << "' not supported.\n";
+    }
+}
 
 /**
  * @brief Map each segment_id to a single node index in the given Memb_list.
@@ -321,7 +327,7 @@ static void append_sections_to_to_report(const std::shared_ptr<SecMapping>& sect
 
 
 /// @brief create an vector of ids in target_gids that are on this thread
-static std::vector<int> get_intersection_ids(const NrnThread& nt, std::vector<int>& target_gids) {
+std::vector<int> get_intersection_ids(const NrnThread& nt, const std::vector<int>& target_gids) {
     std::unordered_set<int> thread_gids;
     for (int i = 0; i < nt.ncell; i++) {
         thread_gids.insert(nt.presyns[i].gid_);
@@ -618,15 +624,9 @@ static VarsToReport get_lfp_vars_to_report(const NrnThread& nt,
             nrn_abort(1);
         }
         std::vector<VarWithMapping> to_report;
-        const auto& offsets = cell_mapping->electrode_offsets;
-        size_t start = 0;
-        size_t end = 0;
-        if (!offsets.empty()) {
-            nrn_assert(offsets.size() > lfp_report_index + 1);
-            start = offsets[lfp_report_index];
-            end = offsets[lfp_report_index + 1];
-        }
-        for (auto electrode_id = start; electrode_id < end; electrode_id++) {
+        // the report's electrodes are numbered from 0, as in its electrodes file
+        const auto [start, end] = cell_mapping->report_electrodes(lfp_report_index);
+        for (size_t electrode_id = 0; electrode_id < end - start; electrode_id++) {
             to_report.emplace_back(VarWithMapping(electrode_id, report_variable + offset_lfp));
             offset_lfp++;
         }
@@ -658,6 +658,10 @@ void ReportHandler::create_report(ReportConfiguration& report_config,
         std::cerr << "[ERROR] Synapse report mechanism to report: " << report_config.mech_names[0]
                   << " is not mapped in this simulation, cannot report on it \n";
         nrn_abort(1);
+    }
+    if (report_config.method == ReportMethod::Sum) {
+        create_lfp_sum_report(report_config, dt);
+        return;
     }
     for (int ith = 0; ith < nrn_nthread; ++ith) {
         NrnThread& nt = nrn_threads[ith];
@@ -714,7 +718,8 @@ void ReportHandler::create_report(ReportConfiguration& report_config,
                                                               vars_to_report,
                                                               report_config.output_path.data(),
                                                               report_config.report_dt,
-                                                              report_config.type);
+                                                              report_config.type,
+                                                              report_config.lfp_report_index);
             report_event->send(t, net_cvode_instance, &nt);
             m_report_events.push_back(std::move(report_event));
         }

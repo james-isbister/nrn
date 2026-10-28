@@ -5,8 +5,10 @@
 # See top-level LICENSE file for details.
 # =============================================================================.
 */
+#include "coreneuron/apps/corenrn_parameters.hpp"
 #include "coreneuron/io/lfp.hpp"
 #include "coreneuron/io/nrnsection_mapping.hpp"
+#include "coreneuron/io/reports/lfp_sum_report.hpp"
 #include "coreneuron/io/reports/report_event.hpp"
 #include "coreneuron/mpi/nrnmpi.h"
 
@@ -202,6 +204,75 @@ TEST_CASE("LFP_ReportEvent") {
 
     REQUIRE_THAT(mapinfo->_lfp[0], Catch::Matchers::WithinAbs(5.5, 1.0));
     REQUIRE_THAT(mapinfo->_lfp[3], Catch::Matchers::WithinAbs(7.0, 1.0));
+
+    // The same cells in a summed report: each electrode's value is the cells' total
+    ReportConfiguration config{};
+    config.output_path = report_name;
+    config.start = tstart;
+    config.stop = 1.0;
+    config.report_dt = report_dt;
+    {
+        auto summed = std::make_shared<LFPSumReport>(report_name, 2);
+        std::vector<LFPSumEvent::Cell> cells{{c42.get(), 0, 0, 2}, {c134.get(), 0, 0, 2}};
+        LFPSumEvent sum_event(summed, cells, true, config, dt, tstart);
+        sum_event.add_lfp(&nt, summed->row(0));
+        REQUIRE_THAT(summed->row(0)[0],
+                     Catch::Matchers::WithinRel(mapinfo->_lfp[0] + mapinfo->_lfp[2], 1e-12));
+        REQUIRE_THAT(summed->row(0)[1],
+                     Catch::Matchers::WithinRel(mapinfo->_lfp[1] + mapinfo->_lfp[3], 1e-12));
+
+        // a flush hands the rows on and clears them
+        const bool mpi_enable = corenrn_param.mpi_enable;
+        corenrn_param.mpi_enable = false;
+        summed->add_step(0.0);
+        summed->flush();
+        corenrn_param.mpi_enable = mpi_enable;
+        REQUIRE(summed->rows_flushed() == 1);
+        REQUIRE(summed->row(0)[0] == 0.0);
+    }
+    {
+        // two populations side by side in a row, and a report taking only the second electrode
+        auto summed = std::make_shared<LFPSumReport>(report_name, 3);
+        std::vector<LFPSumEvent::Cell> cells{{c42.get(), 0, 0, 2}, {c134.get(), 2, 1, 1}};
+        LFPSumEvent sum_event(summed, cells, true, config, dt, tstart);
+        sum_event.add_lfp(&nt, summed->row(0));
+        REQUIRE_THAT(summed->row(0)[0], Catch::Matchers::WithinRel(mapinfo->_lfp[0], 1e-12));
+        REQUIRE_THAT(summed->row(0)[1], Catch::Matchers::WithinRel(mapinfo->_lfp[1], 1e-12));
+        REQUIRE_THAT(summed->row(0)[2], Catch::Matchers::WithinRel(mapinfo->_lfp[3], 1e-12));
+    }
+
+    delete mapinfo;
+    delete nt.nrn_fast_imem;
+}
+
+TEST_CASE("LFP_ReportEvent_second_report") {
+    // A cell whose factors hold two LFP reports: electrodes 0-1 for the first, 2 for the second
+    const std::string report_name = "second_report";
+    NrnThread nt;
+    nt.mapping = new NrnThreadMappingInfo;
+    auto* mapinfo = static_cast<NrnThreadMappingInfo*>(nt.mapping);
+    auto cell = std::make_shared<CellMapping>(7);
+    cell->electrode_offsets = {0, 2, 3};
+    for (const int segment: {0, 1, 2}) {
+        std::vector<double> factors{1.0, 2.0, segment + 3.0};
+        cell->add_segment_lfp_factor(segment, factors.begin(), factors.end());
+    }
+    mapinfo->add_cell_mapping(cell);
+    mapinfo->prepare_lfp();
+    REQUIRE(cell->report_electrodes(1) == std::make_pair(size_t{2}, size_t{3}));
+
+    std::vector<double> currents = {0.5, 0.25, 0.125};
+    nt.nrn_fast_imem = new NrnFastImem;
+    nt.nrn_fast_imem->nrn_sav_rhs = currents.data();
+    nt.summation_report_handler_ = std::make_unique<SummationReportMapping>();
+
+    // the second report's electrode is its electrode 0
+    VarsToReport vars_to_report;
+    vars_to_report[7] = {VarWithMapping(0, mapinfo->_lfp.data())};
+    ReportEvent event(0.025, 0.0, vars_to_report, report_name.data(), 0.1, ReportType::LFP, 1);
+    event.lfp_calc(&nt);
+    REQUIRE_THAT(mapinfo->_lfp[0],
+                 Catch::Matchers::WithinRel(0.5 * 3 + 0.25 * 4 + 0.125 * 5, 1e-12));
 
     delete mapinfo;
     delete nt.nrn_fast_imem;

@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "report_handler.hpp"
+#include "lfp_sum_report.hpp"
 
 namespace coreneuron {
 
@@ -29,12 +30,15 @@ class SonataReportHandler: public ReportHandler {
     void register_custom_report(const NrnThread& nt,
                                 const ReportConfiguration& config,
                                 const VarsToReport& vars_to_report) override;
+    void create_lfp_sum_report(ReportConfiguration& config, double dt) override;
 
   private:
     void register_report(const NrnThread& nt,
                          const ReportConfiguration& config,
                          const VarsToReport& vars_to_report);
     std::pair<std::string, int> get_population_info(int gid);
+
+    std::vector<std::unique_ptr<LFPSumEvent>> m_lfp_sum_events;
 #endif  // ENABLE_SONATA_REPORTS
 
   private:

@@ -18,6 +18,7 @@
 #include "coreneuron/network/netcvode.hpp"
 #include "coreneuron/sim/multicore.hpp"
 #include "coreneuron/io/reports/nrnreport.hpp"
+#include "coreneuron/io/reports/lfp_sum_report.hpp"
 #include "coreneuron/io/nrnsection_mapping.hpp"
 #include "coreneuron/mechanism/mech_mapping.hpp"
 #include "coreneuron/mechanism/membfunc.hpp"
@@ -34,6 +35,8 @@ static int size_report_buffer = 4;
 void nrn_flush_reports(double t) {
     // flush before buffer is full
 #ifdef ENABLE_SONATA_REPORTS
+    // summed LFP reports first: their steps reach libsonatareport only now
+    flush_lfp_sum_reports();
     sonata_check_and_flush(t);
 #endif
 }
@@ -65,7 +68,9 @@ void set_report_buffer_size(int n) {
 
 void finalize_report() {
 #ifdef ENABLE_SONATA_REPORTS
+    flush_lfp_sum_reports();
     sonata_flush(nrn_threads[0]._t);
+    clear_lfp_sum_reports();
 #endif
 }
 }  // Namespace coreneuron
