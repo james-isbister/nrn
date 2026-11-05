@@ -235,17 +235,17 @@ inline Compartments compartments_from_string(const std::string_view str,
     return from_string<Compartments>(str, compartments_map, "Compartments", file_path);
 }
 
-// ReportMethod: whether an LFP report writes each cell's contribution or their sum
-enum class ReportMethod { ByCell, Sum };
-constexpr std::array<std::pair<ReportMethod, std::string_view>, 2> report_method_map{
-    {{ReportMethod::ByCell, "by_cell"}, {ReportMethod::Sum, "sum"}}};
+// LFPReportMethod: whether an LFP report writes each cell's contribution or their sum
+enum class LFPReportMethod { ByCell, Sum };
+constexpr std::array<std::pair<LFPReportMethod, std::string_view>, 2> lfp_report_method_map{
+    {{LFPReportMethod::ByCell, "by_cell"}, {LFPReportMethod::Sum, "sum"}}};
 
-inline std::string to_string(ReportMethod m) {
-    return to_string(m, report_method_map, "ReportMethod");
+inline std::string to_string(LFPReportMethod m) {
+    return to_string(m, lfp_report_method_map, "LFPReportMethod");
 }
-inline ReportMethod report_method_from_string(const std::string_view str,
-                                              const std::string_view file_path = "") {
-    return from_string<ReportMethod>(str, report_method_map, "ReportMethod", file_path);
+inline LFPReportMethod lfp_report_method_from_string(const std::string_view str,
+                                                     const std::string_view file_path = "") {
+    return from_string<LFPReportMethod>(str, lfp_report_method_map, "LFPReportMethod", file_path);
 }
 
 struct ReportConfiguration {
@@ -271,8 +271,8 @@ struct ReportConfiguration {
     std::vector<int> point_compartment_ids;  // list of compartment_ids for this compartment set
                                              // report (empty otherwise)
     Scaling scaling;
-    size_t lfp_report_index = 0;                 // position of this LFP report in electrode_offsets
-    ReportMethod method = ReportMethod::ByCell;  // LFP: a trace per cell, or per population
+    size_t lfp_report_index = 0;  // position of this LFP report in electrode_offsets
+    LFPReportMethod lfp_method = LFPReportMethod::ByCell;
 };
 
 void setup_report_engine(double dt_report, double mindelay);
