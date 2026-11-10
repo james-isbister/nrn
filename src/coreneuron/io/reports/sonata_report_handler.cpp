@@ -63,14 +63,14 @@ void SonataReportHandler::register_report(const NrnThread& nt,
                                           const VarsToReport& vars_to_report) {
     const auto kind = report_conf.lfp_method == LFPReportMethod::Sum ? std::string("lfp_sum")
                                                                      : to_string(report_conf.type);
-    // -2 is a report that exists already, as it does for a rank's second thread
     const int created = sonata_create_report(report_conf.output_path.data(),
                                              report_conf.start,
                                              report_conf.stop,
                                              report_conf.report_dt,
                                              report_conf.unit.data(),
                                              kind.data());
-    nrn_assert(created != -1);
+    // A libsonatareport that has no summed reports would leave the report out
+    nrn_assert(created != -1 || report_conf.lfp_method != LFPReportMethod::Sum);
     sonata_set_report_max_buffer_size_hint(report_conf.output_path.data(), report_conf.buffer_size);
 
     for (const auto& kv: vars_to_report) {
